@@ -24,9 +24,9 @@ Aztec is building a decentralized, privacy-focused network and the sequencer nod
 curl -O https://raw.githubusercontent.com/hnfdm/sh/main/aztec-sequencer.sh && chmod +x aztec-sequencer.sh && ./aztec-sequencer.sh
 ```
 
-## 🧩 Post-Installation
-> [!Note]
-> **After running node, you should wait at least 10 to 20 mins before your run these commands**
+### 🧩 Post-Installation
+
+**After running node, you should wait at least 10 to 20 mins before your run these commands**
 
 - Use this command to get `block-number`
 ```
@@ -47,9 +47,9 @@ curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","method
 ```
 - It will ask the `address` , `block-number` and `proof` , Enter all of them one by one and you will get `Apprentice` instantly
 
-## 🚀 Register as Validator
->[!WARNING]
->You may see an error like `ValidatorQuotaFilledUntil` when trying to register as a validator, which means the daily quota has been reached—convert the provided Unix timestamp to local time to know when you can try again to register as Validator.
+### 🚀 Register as Validator
+
+You may see an error like `ValidatorQuotaFilledUntil` when trying to register as a validator, which means the daily quota has been reached—convert the provided Unix timestamp to local time to know when you can try again to register as Validator.
 
 - Replace `SEPOLIA-RPC-URL` , `YOUR-PRIVATE-KEY` , `YOUR-VALIDATOR-ADDRESS` with actual value and then execute this command
 ```
