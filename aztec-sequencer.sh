@@ -4,7 +4,8 @@ curl -s https://data.zamzasalim.xyz/file/uploads/asclogo.sh | bash
 sleep 5
 
 # setup_aztec.sh
-# Script to set up Aztec node with dependencies, Docker, and firewall configuration
+# Script to set up Aztec node with dependencies, Docker, firewall configuration,
+# and retrieve block number and sync proof
 
 # Exit on any error
 set -e
@@ -121,6 +122,82 @@ tmux send-keys -t aztec "aztec start --node --archiver --sequencer \
   --p2p.p2pIp $P2P_IP \
   --p2p.maxTxPoolSize 1000000000" C-m
 
+# Step 8: Wait for node to be ready and retrieve block number and proof
+echo "Waiting for the node to start (this may take a few minutes)..."
+sleep 60  # Adjust sleep time as needed based on node startup time
+
+# Function to check if node is reachable
+check_node() {
+    curl -s -X POST -H 'Content-Type: application/json' \
+        -d '{"jsonrpc":"2.0","method":"node_getL2Tips","params":[],"id":67}' \
+        http://localhost:8080 >/dev/null 2>&1
+    return $?
+}
+
+# Wait for node to be reachable (up to 5 minutes)
+MAX_WAIT=300
+WAIT_INTERVAL=10
+ELAPSED=0
+
+while [ $ELAPSED -lt $MAX_WAIT ]; do
+    if check_node; then
+        echo "Node is reachable!"
+        break
+    fi
+    echo "Waiting for node to become reachable... ($ELAPSED/$MAX_WAIT seconds)"
+    sleep $WAIT_INTERVAL
+    ELAPSED=$((ELAPSED + WAIT_INTERVAL))
+done
+
+if [ $ELAPSED -ge $MAX_WAIT ]; then
+    echo "Error: Node is not reachable after $MAX_WAIT seconds. Please check the node logs in the 'aztec' tmux session."
+    echo "To attach, run: tmux attach -t aztec"
+    exit 1
+fi
+
+# Get the latest proven block number
+echo "Retrieving the latest proven block number..."
+BLOCK_NUMBER=$(curl -s -X POST -H 'Content-Type: application/json' \
+    -d '{"jsonrpc":"2.0","method":"node_getL2Tips","params":[],"id":67}' \
+    http://localhost:8080 | jq -r '.result.proven.number')
+
+if [ -z "$BLOCK_NUMBER" ] || [ "$BLOCK_NUMBER" = "null" ]; then
+    echo "Error: Failed to retrieve block number. Check node status."
+    echo "To view logs, run: tmux attach -t aztec"
+    exit 1
+fi
+
+echo "Latest Proven Block Number: $BLOCK_NUMBER"
+
+# Generate sync proof for the block number
+echo "Generating sync proof for block number $BLOCK_NUMBER..."
+SYNC_PROOF=$(curl -s -X POST -H 'Content-Type: application/json' \
+    -d "{\"jsonrpc\":\"2.0\",\"method\":\"node_getArchiveSiblingPath\",\"params\":[\"$BLOCK_NUMBER\",\"$BLOCK_NUMBER\"],\"id\":67}" \
+    http://localhost:8080 | jq -r '.result')
+
+if [ -z "$SYNC_PROOF" ] || [ "$SYNC_PROOF" = "null" ]; then
+    echo "Error: Failed to generate sync proof. Check node status."
+    echo "To view logs, run: tmux attach -t aztec"
+    exit 1
+fi
+
+echo "Sync Proof (base64): $SYNC_PROOF"
+
+# Save output to a file for reference
+OUTPUT_FILE="aztec_node_output.txt"
+echo "Saving block number and sync proof to $OUTPUT_FILE..."
+cat << EOF > $OUTPUT_FILE
+Aztec Node Setup Output
+----------------------
+Timestamp: $(date)
+Latest Proven Block Number: $BLOCK_NUMBER
+Sync Proof (base64): $SYNC_PROOF
+----------------------
+To attach to the node session, run: tmux attach -t aztec
+To detach from the session, press: Ctrl+b, then d
+EOF
+
 echo "Setup complete! Aztec Sequencer Node is running in tmux session 'aztec'."
-echo "To attach to the tmux session, run: tmux a -t aztec"
+echo "Block number and sync proof have been saved to $OUTPUT_FILE."
+echo "To attach to the tmux session, run: tmux attach -t aztec"
 echo "To detach from the tmux session, press: Ctrl+b, then d"
