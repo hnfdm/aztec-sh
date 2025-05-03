@@ -125,14 +125,19 @@ tmux new-session -d -s aztec
 
 # Step 7: Run Sequencer Node
 echo "Starting Aztec Sequencer Node in tmux session..."
-tmux send-keys -t aztec "aztec start --node --archiver --sequencer \
-  --network alpha-testnet \
-  --l1-rpc-urls $RPC_URL \
-  --l1-consensus-host-urls $BEACON_URL \
-  --sequencer.validatorPrivateKey $VALIDATOR_PRIVATE_KEY \
-  --sequencer.coinbase $COINBASE_ADDRESS \
-  --p2p.p2pIp $P2P_IP \
-  --p2p.maxTxPoolSize 1000000000" C-m
+NODE_COMMAND="aztec start --node --archiver --sequencer --network alpha-testnet --l1-rpc-urls \"$RPC_URL\" --l1-consensus-host-urls \"$BEACON_URL\" --sequencer.validatorPrivateKey \"$VALIDATOR_PRIVATE_KEY\" --sequencer.coinbase \"$COINBASE_ADDRESS\" --p2p.p2pIp \"$P2P_IP\" --p2p.maxTxPoolSize 1000000000"
+tmux send-keys -t aztec "$NODE_COMMAND" C-m
+
+# Verify the node process is running
+echo "Verifying node process..."
+sleep 10  # Wait briefly for the process to start
+if tmux capture-pane -t aztec -p | grep -q "aztec"; then
+    echo "Node process appears to be running in tmux session."
+else
+    echo "Warning: Node process may not have started correctly."
+    echo "Manually run the following command in the tmux session (tmux attach -t aztec):"
+    echo "$NODE_COMMAND"
+fi
 
 # Step 8: Wait for node to be ready and retrieve block number and proof
 echo "Waiting for the node to start (this may take a few minutes)..."
@@ -164,6 +169,7 @@ done
 if [ $ELAPSED -ge $MAX_WAIT ]; then
     echo "Error: Node is not reachable after $MAX_WAIT seconds. Please check the node logs in the 'aztec' tmux session."
     echo "To attach, run: tmux attach -t aztec"
+    echo "Manually run the node command if needed: $NODE_COMMAND"
     exit 1
 fi
 
