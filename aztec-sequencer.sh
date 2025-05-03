@@ -2,7 +2,7 @@
 
 # setup_aztec.sh
 # Script to set up Aztec Sequencer node with dependencies, Docker, firewall configuration,
-# retrieve block number and sync proof, handle PATH for Aztec tools, and use descriptive input prompts
+# retrieve block number and sync proof, and handle PATH for Aztec tools
 
 # Exit on any error
 set -e
@@ -12,7 +12,7 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
-# Prompt for required inputs with updated descriptions
+# Prompt for required inputs with descriptive names
 echo "Please provide the following details:"
 read -p "Enter ETH Sepolia RPC URL: " RPC_URL
 read -p "Enter ETH Beacon Sepolia RPC URL: " BEACON_URL
@@ -76,16 +76,20 @@ fi
 
 # Step 4: Install Aztec Tools
 echo "Installing Aztec Tools..."
-bash -i <(curl -s https://install.aztec.network)
+bash -i <(curl -s https://install.aztec.network) <<< "y"  # Auto-confirm PATH prompt
 
-# Add /root/.aztec/bin to PATH
+# Add /root/.aztec/bin to PATH in both .bashrc and .bash_profile
 echo "Adding /root/.aztec/bin to PATH..."
 if ! grep -q "/root/.aztec/bin" ~/.bashrc; then
     echo "export PATH=\$PATH:/root/.aztec/bin" >> ~/.bashrc
 fi
+if ! grep -q "/root/.aztec/bin" ~/.bash_profile; then
+    echo "export PATH=\$PATH:/root/.aztec/bin" >> ~/.bash_profile
+fi
 
-# Source ~/.bashrc to apply PATH changes
-source ~/.bashrc
+# Source both files to apply PATH changes
+source ~/.bashrc || true
+source ~/.bash_profile || true
 
 # Verify Aztec installation
 echo "Verifying Aztec installation..."
@@ -93,7 +97,8 @@ if command_exists aztec; then
     echo "Aztec installed successfully. Version: $(aztec --version)"
 else
     echo "Error: Aztec installation failed or /root/.aztec/bin is not in PATH."
-    echo "Manually add it by running: echo 'export PATH=\$PATH:/root/.aztec/bin' >> ~/.bashrc && source ~/.bashrc"
+    echo "Manually verify the installation directory: ls -la /root/.aztec/bin"
+    echo "Manually add PATH by running: echo 'export PATH=\$PATH:/root/.aztec/bin' >> ~/.bash_profile && source ~/.bash_profile"
     exit 1
 fi
 
