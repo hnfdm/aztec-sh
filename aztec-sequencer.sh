@@ -2,7 +2,7 @@
 
 # setup_aztec.sh
 # Script to set up Aztec Sequencer node with dependencies, Docker, firewall configuration,
-# retrieve block number and sync proof, and handle PATH for Aztec tools
+# retrieve block number and sync proof, handle PATH for Aztec tools, and auto-confirm firewall prompts
 
 # Exit on any error
 set -e
@@ -112,8 +112,9 @@ sudo ufw allow 22
 sudo ufw allow ssh
 sudo ufw allow 40400
 sudo ufw allow 8080
-sudo ufw enable
-echo "y" | sudo ufw enable  # Auto-confirm enabling firewall
+# Auto-confirm all ufw enable prompts
+echo "y" | sudo ufw enable
+sudo ufw reload  # Ensure changes take effect
 
 # Step 6: Start Tmux session
 echo "Starting tmux session..."
@@ -141,7 +142,7 @@ fi
 
 # Step 8: Wait for node to be ready and retrieve block number and proof
 echo "Waiting for the node to start (this may take a few minutes)..."
-sleep 60  # Adjust sleep time as needed based on node startup time
+sleep 60  # Initial wait for node startup
 
 # Function to check if node is reachable
 check_node() {
@@ -151,8 +152,8 @@ check_node() {
     return $?
 }
 
-# Wait for node to be reachable (up to 5 minutes)
-MAX_WAIT=300
+# Wait for node to be reachable (up to 10 minutes)
+MAX_WAIT=600
 WAIT_INTERVAL=10
 ELAPSED=0
 
@@ -167,7 +168,17 @@ while [ $ELAPSED -lt $MAX_WAIT ]; do
 done
 
 if [ $ELAPSED -ge $MAX_WAIT ]; then
-    echo "Error: Node is not reachable after $MAX_WAIT seconds. Please check the node logs in the 'aztec' tmux session."
+    echo "Error: Node is not reachable after $MAX_WAIT seconds."
+    echo "Checking Docker container status..."
+    sudo docker ps -a | grep aztecprotocol/aztec || echo "No Aztec container found."
+    echo "Capturing recent Docker logs..."
+    CONTAINER_ID=$(sudo docker ps -a -q --filter ancestor=aztecprotocol/aztec | head -n 1)
+    if [ -n "$CONTAINER_ID" ]; then
+        sudo docker logs --tail 50 $CONTAINER_ID
+    else
+        echo "No running Aztec container found."
+    fi
+    echo "Please check the node logs in the 'aztec' tmux session."
     echo "To attach, run: tmux attach -t aztec"
     echo "Manually run the node command if needed: $NODE_COMMAND"
     exit 1
