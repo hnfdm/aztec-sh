@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# 🚀 Auto Setup Sepolia Geth + Beacon (Prysm or Lighthouse) for Aztec Sequencer [LOW STORAGE VERSION]
-# Optimized for under 500GB storage while maintaining functionality
-# Assumes system has at least 16GB RAM
+# 🚀 Auto Setup Sepolia Geth + Beacon (Prysm or Lighthouse) for Aztec Sequencer [STORAGE OPTIMIZED]
+# Corrected version with proper flags and syntax
+# Maintains under 500GB storage requirement
 
 set -e
 
@@ -82,8 +82,10 @@ echo ">>> Generating JWT secret..."
 openssl rand -hex 32 > "$JWT_FILE"
 
 # === WRITE docker-compose.yml ===
-echo ">>> Writing optimized docker-compose.yml for reduced storage..."
+echo ">>> Writing optimized docker-compose.yml..."
 cat > "$COMPOSE_FILE" <<EOF
+version: '3.8'
+
 services:
   geth:
     image: ethereum/client-go:stable
@@ -98,15 +100,17 @@ services:
       - "8551:8551"
     command: >
       --sepolia
-      --http --http.addr 0.0.0.0 --http.api eth,web3,net,engine
-      --authrpc.addr 0.0.0.0 --authrpc.port 8551
+      --http
+      --http.addr 0.0.0.0
+      --http.api eth,web3,net,engine
+      --authrpc.addr 0.0.0.0
+      --authrpc.port 8551
       --authrpc.jwtsecret /root/jwt.hex
       --authrpc.vhosts=*
       --http.corsdomain="*"
       --syncmode=snap
       --cache=2048
       --gcmode=archive
-      --pruneancient=true
       --txlookuplimit=0
 EOF
 
@@ -133,9 +137,11 @@ if [ "$BEACON" = "prysm" ]; then
       --genesis-beacon-api-url=https://lodestar-sepolia.chainsafe.io
       --checkpoint-sync-url=https://sepolia.checkpoint-sync.ethpandaops.io
       --accept-terms-of-use
-      --rpc-host=0.0.0.0 --rpc-port=4000
-      --grpc-gateway-host=0.0.0.0 --grpc-gateway-port=3500
-      --slots-per-archive-point=2048  # Reduced from default 8192
+      --rpc-host=0.0.0.0
+      --rpc-port=4000
+      --grpc-gateway-host=0.0.0.0
+      --grpc-gateway-port=3500
+      --slots-per-archive-point=2048
 EOF
 else
   cat >> "$COMPOSE_FILE" <<EOF
@@ -154,29 +160,30 @@ else
       - "9000:9000/tcp"
       - "9000:9000/udp"
     command: >
-      lighthouse bn
+      lighthouse
+      bn
       --network sepolia
       --execution-endpoint http://geth:8551
       --execution-jwt /root/jwt.hex
       --checkpoint-sync-url=https://sepolia.checkpoint-sync.ethpandaops.io
       --http
       --http-address 0.0.0.0
-      --slots-per-restore-point 2048  # Reduced from default 8192
+      --slots-per-restore-point 2048
 EOF
 fi
 
 # === START DOCKER ===
-echo ">>> Starting optimized Sepolia node with $BEACON (storage-optimized)..."
+echo ">>> Starting optimized Sepolia node with $BEACON..."
 cd "$DATA_DIR"
+docker compose down >/dev/null 2>&1 || true  # Clean up any previous instances
 docker compose up -d
 
-echo "\n>>> ✅ Optimized setup complete (under 500GB storage). Use these commands to monitor:"
+echo -e "\n>>> ✅ Optimized setup complete. Monitoring commands:"
 echo "  docker logs -f geth"
 echo "  docker logs -f $BEACON"
 echo "  df -h $DATA_DIR  # Check disk usage"
-echo "  docker exec geth geth db stats  # Check Geth storage stats"
-echo "\n>>> Storage optimization details:"
-echo "  - Reduced Geth cache to 2048MB"
-echo "  - Enabled ancient data pruning"
-echo "  - Reduced beacon chain archive points"
-echo "  - Maintained archive mode for Aztec requirements"
+echo -e "\n>>> Storage optimizations applied:"
+echo "  - Geth cache reduced to 2048MB"
+echo "  - Beacon chain archive points reduced"
+echo "  - Removed unsupported pruneancient flag"
+echo "  - Fixed Lighthouse command syntax"
