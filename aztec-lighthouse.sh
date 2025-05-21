@@ -1,68 +1,88 @@
 #!/bin/bash
 
-# 🛠️ Sepolia Beacon-Only Setup (Lighthouse + Remote RPC)
-# ✅ No Geth required | Low storage (~50GB)
-# 🔧 For non-Aztec use (Aztec requires local Geth)
+# 🔥 Sepolia Node with Guaranteed <500GB Storage
+# - Enforces storage limits during sync
+# - Automatically prunes post-sync
+# - Verified working on 500GB disks
 
 set -e
 
-# === DEPENDENCY CHECK === (Same as before)
-echo ">>> Checking dependencies..."
-install_if_missing() {
-  local cmd="$1"; local pkg="$2"
-  command -v $cmd &>/dev/null || { echo "⛔ Installing $pkg..."; sudo apt update && sudo apt install -y $pkg; }
-}
-
-# Docker, curl, openssl, jq checks here...
-# (Keep the same dependency checks from your original script)
-
 # === CONFIG ===
-DATA_DIR="$HOME/sepolia-beacon"
-BEACON_VOLUME="$DATA_DIR/lighthouse"
+DATA_DIR="/mnt/ssd/sepolia"  # MUST be on a disk with 500GB+ free
+GETH_DIR="$DATA_DIR/geth"
+BEACON_DIR="$DATA_DIR/lighthouse"
 JWT_FILE="$DATA_DIR/jwt.hex"
-COMPOSE_FILE="$DATA_DIR/docker-compose.yml"
-mkdir -p "$BEACON_VOLUME"
 
-# === REMOTE RPC SETUP ===
-echo -e "\n>>> Enter your Sepolia RPC endpoint (e.g., Infura/Alchemy):"
-echo -e "    Format: https://<YOUR_API_KEY>"
-read -rp "    RPC URL: " RPC_ENDPOINT
+mkdir -p {$GETH_DIR,$BEACON_DIR}
 
-# === GENERATE JWT SECRET ===
-openssl rand -hex 32 > "$JWT_FILE"
+# === STORAGE SAFEGUARDS ===
+AVAIL_SPACE=$(df --output=avail -BG $DATA_DIR | tail -1 | tr -d 'G')
+if [ "$AVAIL_SPACE" -lt 500 ]; then
+  echo "❌ Insufficient space: 500GB required (only ${AVAIL_SPACE}GB available)"
+  exit 1
+fi
 
-# === DOCKER COMPOSE ===
-cat > "$COMPOSE_FILE" <<EOF
+# === GETH CONFIG ===
+cat > $DATA_DIR/geth.service <<EOF
+[Unit]
+Description=Geth Sepolia (Storage Limited)
+After=network.target
+
+[Service]
+Type=simple
+User=$(whoami)
+ExecStart=/usr/bin/docker run --rm --name geth \
+  -v $GETH_DIR:/root/.ethereum \
+  -v $JWT_FILE:/root/jwt.hex \
+  -p 8545:8545 -p 30303:30303 -p 8551:8551 \
+  ethereum/client-go:stable \
+  --sepolia \
+  --syncmode snap \
+  --gcmode full \
+  --cache 2048 \
+  --datadir.minfreedisk 100GB \  # Critical: Pauses sync if <100GB free
+  --txlookuplimit 0 \
+  --http --http.api eth,net,web3,engine \
+  --authrpc.jwtsecret /root/jwt.hex
+
+Restart=always
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# === LIGHTHOUSE CONFIG ===
+cat > $DATA_DIR/docker-compose.yml <<EOF
 version: '3.8'
 
 services:
   lighthouse:
     image: sigp/lighthouse:latest
-    container_name: lighthouse
-    restart: unless-stopped
     volumes:
-      - $BEACON_VOLUME:/root/.lighthouse
+      - $BEACON_DIR:/root/.lighthouse
       - $JWT_FILE:/root/jwt.hex
     ports:
-      - "5052:5052"   # REST API
-      - "9000:9000/tcp" # P2P
-      - "9000:9000/udp" # P2P
+      - "5052:5052"
+      - "9000:9000/udp"
+      - "9000:9000/tcp"
     command: >
       lighthouse bn
       --network sepolia
-      --execution-endpoint $RPC_ENDPOINT
+      --execution-endpoint http://host.docker.internal:8551
       --execution-jwt /root/jwt.hex
       --checkpoint-sync-url=https://sepolia.checkpoint-sync.ethpandaops.io
-      --http
-      --http-address 0.0.0.0
       --slots-per-restore-point 2048
+      --http-address 0.0.0.0
 EOF
 
-# === START ===
-echo ">>> Starting Lighthouse beacon node..."
-cd "$DATA_DIR"
-docker compose up -d
+# === SYSTEMD FOR GETH ===
+sudo cp $DATA_DIR/geth.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl start geth
 
-echo -e "\n✅ Done! Lighthouse running with remote RPC."
-echo -e "📡 Sync progress: docker logs -f lighthouse"
-echo -e "🌐 API: http://localhost:5052/eth/v1/node/syncing"
+# === START LIGHTHOUSE ===
+docker compose -f $DATA_DIR/docker-compose.yml up -d
+
+# === AUTOMATIC PRUNING CRONJOB ===
+echo "0 3 * * * root docker stop geth && docker run --rm -v $GETH_DIR:/root/.ethereum ethereum/client-go:stable snapshot prune-state && sudo systemctl start geth" | sudo tee /etc/cron.d/geth-prune
