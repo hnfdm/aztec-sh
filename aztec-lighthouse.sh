@@ -1,5 +1,5 @@
 #!/bin/bash
-# aztec-lighthouse.sh - Fixed Version with Directory Handling
+# aztec-lighthouse.sh - Corrected for Geth 1.15+
 # Copyright (c) 2024 Your Name
 
 set -e
@@ -11,19 +11,14 @@ JWT_FILE="$DATA_DIR/jwt.hex"
 COMPOSE_FILE="$DATA_DIR/docker-compose.yml"
 PRUNE_LOG="$DATA_DIR/prune.log"
 
-# === CLEANUP PREVIOUS ERRORS ===
-# Remove if jwt.hex is a directory
-[ -d "$JWT_FILE" ] && {
-  echo "⚠️  Found directory at $JWT_FILE - cleaning up..."
-  rm -rf "$JWT_FILE"
-}
+# === CLEANUP ===
+[ -d "$JWT_FILE" ] && { rm -rf "$JWT_FILE"; echo "Removed directory $JWT_FILE"; }
 
 # === DEPENDENCY CHECK ===
-echo ">>> Checking system requirements..."
+echo ">>> Checking requirements..."
 command -v docker >/dev/null 2>&1 || { 
-  echo "⛔ Docker not found. Installing...";
-  curl -fsSL https://get.docker.com | sudo sh;
-  sudo usermod -aG docker $USER;
+  curl -fsSL https://get.docker.com | sudo sh
+  sudo usermod -aG docker $USER
 }
 command -v jq >/dev/null 2>&1 || sudo apt-get install -y jq
 command -v openssl >/dev/null 2>&1 || sudo apt-get install -y openssl
@@ -32,7 +27,7 @@ command -v openssl >/dev/null 2>&1 || sudo apt-get install -y openssl
 mkdir -p "$GETH_DIR"
 [ ! -f "$JWT_FILE" ] && openssl rand -hex 32 > "$JWT_FILE"
 
-# === DOCKER COMPOSE SETUP ===
+# === DOCKER COMPOSE ===
 cat > "$COMPOSE_FILE" <<EOF
 services:
   geth:
@@ -60,10 +55,8 @@ services:
       "--cache", "1024",
       "--gcmode", "archive",
       "--txlookuplimit", "0",
-      "--snapshot",
-      "--prune",
-      "--prune.storage.older", "1h",
-      "--prune.history.older", "1h"
+      "--history.state=0",
+      "--history.transactions=0"
     ]
 
   lighthouse:
@@ -84,19 +77,34 @@ services:
       "--network", "sepolia",
       "--execution-endpoint", "http://geth:8551",
       "--execution-jwt", "/root/jwt.hex",
-      "--checkpoint-sync-url", "https://sepolia.beaconstate.info",
+      "--checkpoint-sync-url", "https://sepolia.checkpoint-sync.ethpandaops.io",
       "--http",
       "--http-address", "0.0.0.0",
-      "--slots-per-restore-point", "1024",
-      "--reconstruct-historic-states"
+      "--slots-per-restore-point", "1024"
+    ]
+
+  pruner:
+    image: ethereum/client-go:stable
+    container_name: pruner
+    restart: unless-stopped
+    volumes:
+      - $GETH_DIR:/root/.ethereum
+    command: [
+      "sh", "-c",
+      "while true; do
+        geth snapshot prune-state --datadir /root/.ethereum \\
+          --max-account-range 4 --max-storage-range 4 >> /root/.ethereum/prune.log 2>&1
+        sleep 3600
+      done"
     ]
 EOF
 
 # === DEPLOYMENT ===
-echo ">>> Starting Aztec-compatible node..."
+echo ">>> Starting node..."
 docker compose -f "$COMPOSE_FILE" down >/dev/null 2>&1 || true
 docker compose -f "$COMPOSE_FILE" up -d
 
 echo -e "\n✅ Deployment Successful!"
 echo "📊 Monitor: docker logs -f geth"
-echo "🔧 Auto-pruning runs hourly in background"
+echo "🔧 Hourly pruning via separate container"
+echo "💡 First prune will run within 1 hour"
