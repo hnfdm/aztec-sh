@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# 🚀 Ultra-Compact Sepolia Geth + Lighthouse for Aztec Sequencer [300GB VERSION]
-# Optimized for systems with only 300GB storage
+# 🚀 Corrected Ultra-Compact Sepolia Setup [300GB VERSION]
+# Fixed invalid Geth flags while maintaining storage limits
 
 set -e
 
@@ -65,7 +65,7 @@ echo ">>> Generating JWT secret..."
 openssl rand -hex 32 > "$JWT_FILE"
 
 # === WRITE docker-compose.yml ===
-echo ">>> Writing ultra-compact docker-compose.yml (300GB version)..."
+echo ">>> Writing corrected ultra-compact docker-compose.yml..."
 cat > "$COMPOSE_FILE" <<EOF
 services:
   geth:
@@ -93,8 +93,8 @@ services:
       --cache 1024
       --gcmode archive
       --history.transactions 0
-      --bloomfilter.size 2048
       --snapshot=false
+      --txlookuplimit 0
 
   lighthouse:
     image: sigp/lighthouse:latest
