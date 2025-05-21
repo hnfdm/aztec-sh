@@ -1,32 +1,9 @@
 #!/bin/bash
 
-# 🚀 Auto-Pruning Sepolia Geth + Lighthouse [300GB VERSION]
-# Features automatic storage pruning while maintaining archive mode
+# 🚀 Corrected Sepolia Geth + Lighthouse [300GB VERSION]
+# Uses modern Geth pruning flags
 
 set -e
-
-# === DEPENDENCY CHECK ===
-echo ">>> Checking required dependencies..."
-install_if_missing() {
-  local cmd="$1"
-  local pkg="$2"
-  command -v $cmd >/dev/null 2>&1 || {
-    echo "⛔ Missing: $cmd → installing $pkg..."
-    sudo apt update && sudo apt install -y $pkg
-  }
-}
-
-# Docker setup
-if ! command -v docker &>/dev/null; then
-  echo "⛔ Docker not found. Installing..."
-  curl -fsSL https://get.docker.com | sudo sh
-  sudo usermod -aG docker $USER
-  newgrp docker
-fi
-
-install_if_missing curl curl
-install_if_missing openssl openssl
-install_if_missing jq jq
 
 # === CONFIG ===
 DATA_DIR="$HOME/sepolia-node"
@@ -34,10 +11,6 @@ GETH_DIR="$DATA_DIR/geth"
 JWT_FILE="$DATA_DIR/jwt.hex"
 COMPOSE_FILE="$DATA_DIR/docker-compose.yml"
 mkdir -p "$GETH_DIR"
-
-# === GENERATE JWT SECRET ===
-echo ">>> Generating JWT secret..."
-openssl rand -hex 32 > "$JWT_FILE"
 
 # === WRITE docker-compose.yml ===
 cat > "$COMPOSE_FILE" <<EOF
@@ -69,9 +42,9 @@ services:
       --cache 1024
       --gcmode archive
       --txlookuplimit 0
-      --pruneancient
-      --datadir.ancient=/root/.ethereum/sepolia/geth/chaindata/ancient
       --snapshot=false
+      --history.state=0   # Prune state history
+      --history.transactions=0
 
   lighthouse:
     image: sigp/lighthouse:latest
@@ -100,12 +73,8 @@ services:
 EOF
 
 # === START SERVICES ===
-echo ">>> Starting auto-pruning node (300GB target)..."
-docker compose -f "$COMPOSE_FILE" down >/dev/null 2>&1 || true
 docker compose -f "$COMPOSE_FILE" up -d
 
-echo -e "\n✅ Deployment Complete! Auto-pruning is enabled."
-echo "📊 Monitor storage usage with: df -h $DATA_DIR"
-echo "🔍 Check pruning status: docker exec geth geth db stats | grep Ancient"
-echo "📜 View Geth logs: docker logs -f geth"
-echo "💡 Note: Initial sync may take 24-48 hours"
+echo -e "\n✅ Deployment Complete with Modern Pruning Approach"
+echo "📊 Monitor storage: df -h $DATA_DIR"
+echo "🔍 Check disk usage: du -sh $GETH_DIR $DATA_DIR/lighthouse"
