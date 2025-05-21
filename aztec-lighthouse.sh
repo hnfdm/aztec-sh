@@ -1,5 +1,5 @@
 #!/bin/bash
-# aztec-lighthouse.sh - Corrected for Geth 1.15+
+# aztec-lighthouse.sh - Fixed Pruner Version
 # Copyright (c) 2024 Your Name
 
 set -e
@@ -84,27 +84,32 @@ services:
     ]
 
   pruner:
-    image: ethereum/client-go:stable
+    image: alpine:latest
     container_name: pruner
     restart: unless-stopped
     volumes:
       - $GETH_DIR:/root/.ethereum
-    command: [
-      "sh", "-c",
-      "while true; do
-        geth snapshot prune-state --datadir /root/.ethereum \\
-          --max-account-range 4 --max-storage-range 4 >> /root/.ethereum/prune.log 2>&1
-        sleep 3600
+      - /usr/bin/docker:/usr/bin/docker
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: >
+      /bin/sh -c "
+      while true; do
+        echo \"\$(date): Starting prune...\" >> /root/.ethereum/prune.log;
+        docker exec geth geth snapshot prune-state \\
+          --datadir /root/.ethereum \\
+          --max-account-range 4 \\
+          --max-storage-range 4 >> /root/.ethereum/prune.log 2>&1;
+        echo \"\$(date): Prune completed\" >> /root/.ethereum/prune.log;
+        sleep 3600;
       done"
-    ]
 EOF
 
 # === DEPLOYMENT ===
-echo ">>> Starting node..."
+echo ">>> Starting node with fixed pruner..."
 docker compose -f "$COMPOSE_FILE" down >/dev/null 2>&1 || true
 docker compose -f "$COMPOSE_FILE" up -d
 
 echo -e "\n✅ Deployment Successful!"
-echo "📊 Monitor: docker logs -f geth"
-echo "🔧 Hourly pruning via separate container"
-echo "💡 First prune will run within 1 hour"
+echo "📊 Monitor pruning: docker exec geth tail -f /root/.ethereum/prune.log"
+echo "⏰ Hourly pruning active (first run in 1 hour)"
+echo "💻 Geth logs: docker logs -f geth"
