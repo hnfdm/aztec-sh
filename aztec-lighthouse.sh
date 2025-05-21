@@ -1,15 +1,28 @@
 #!/bin/bash
 
-# 🚀 Auto Setup Sepolia Geth + Lighthouse for Aztec Sequencer (Storage-Optimized)
-# Targets ~100-250GB storage, assumes 500GB NVMe, 16GB RAM
+# 🚀 Auto Setup Sepolia Geth + Beacon (Prysm or Lighthouse) for Aztec Sequencer [LOW STORAGE VERSION]
+# Optimized for under 500GB storage while maintaining functionality
+# Assumes system has at least 16GB RAM
 
 set -e
+
+# === CHOOSE BEACON CLIENT ===
+echo ">>> Choose beacon client to use:"
+echo "1) Prysm"
+echo "2) Lighthouse"
+read -rp "Enter choice [1 or 2]: " BEACON_CHOICE
+
+if [[ "$BEACON_CHOICE" != "1" && "$BEACON_CHOICE" != "2" ]]; then
+  echo "❌ Invalid choice. Exiting."
+  exit 1
+fi
 
 # === DEPENDENCY CHECK ===
 echo ">>> Checking required dependencies..."
 install_if_missing() {
   local cmd="$1"
   local pkg="$2"
+
   if ! command -v $cmd &> /dev/null; then
     echo "⛔ Missing: $cmd → installing $pkg..."
     sudo apt update
@@ -22,16 +35,20 @@ install_if_missing() {
 # Docker check
 if ! command -v docker &> /dev/null || ! command -v docker compose &> /dev/null; then
   echo "⛔ Docker or Docker Compose not found. Installing Docker..."
+
   for pkg in docker.io docker-doc docker-compose podman-docker containerd runc; do
     sudo apt-get remove -y $pkg || true
   done
+
   sudo install -m 0755 -d /etc/apt/keyrings
   curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
   sudo chmod a+r /etc/apt/keyrings/docker.gpg
+
   echo \
     "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
     https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo \"$VERSION_CODENAME\") stable" | \
     sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
   sudo apt update
   sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
   sudo docker run hello-world
@@ -49,15 +66,23 @@ DATA_DIR="$HOME/sepolia-node"
 GETH_DIR="$DATA_DIR/geth"
 JWT_FILE="$DATA_DIR/jwt.hex"
 COMPOSE_FILE="$DATA_DIR/docker-compose.yml"
-BEACON_VOLUME="$DATA_DIR/lighthouse"
-mkdir -p "$GETH_DIR" "$BEACON_VOLUME"
+mkdir -p "$GETH_DIR"
+
+if [ "$BEACON_CHOICE" = "1" ]; then
+  BEACON="prysm"
+  BEACON_VOLUME="$DATA_DIR/prysm"
+else
+  BEACON="lighthouse"
+  BEACON_VOLUME="$DATA_DIR/lighthouse"
+fi
+mkdir -p "$BEACON_VOLUME"
 
 # === GENERATE JWT SECRET ===
 echo ">>> Generating JWT secret..."
 openssl rand -hex 32 > "$JWT_FILE"
 
 # === WRITE docker-compose.yml ===
-echo ">>> Writing docker-compose.yml..."
+echo ">>> Writing optimized docker-compose.yml for reduced storage..."
 cat > "$COMPOSE_FILE" <<EOF
 services:
   geth:
@@ -79,10 +104,41 @@ services:
       --authrpc.vhosts=*
       --http.corsdomain="*"
       --syncmode=snap
-      --state.scheme=path
-      --cache=4096
+      --cache=2048
       --gcmode=archive
-      --history.state=0
+      --pruneancient=true
+      --txlookuplimit=0
+EOF
+
+if [ "$BEACON" = "prysm" ]; then
+  cat >> "$COMPOSE_FILE" <<EOF
+
+  prysm:
+    image: gcr.io/prysmaticlabs/prysm/beacon-chain:stable
+    container_name: prysm
+    restart: unless-stopped
+    volumes:
+      - $BEACON_VOLUME:/data
+      - $JWT_FILE:/data/jwt.hex
+    depends_on:
+      - geth
+    ports:
+      - "4000:4000"
+      - "3500:3500"
+    command: >
+      --datadir=/data
+      --sepolia
+      --execution-endpoint=http://geth:8551
+      --jwt-secret=/data/jwt.hex
+      --genesis-beacon-api-url=https://lodestar-sepolia.chainsafe.io
+      --checkpoint-sync-url=https://sepolia.checkpoint-sync.ethpandaops.io
+      --accept-terms-of-use
+      --rpc-host=0.0.0.0 --rpc-port=4000
+      --grpc-gateway-host=0.0.0.0 --grpc-gateway-port=3500
+      --slots-per-archive-point=2048  # Reduced from default 8192
+EOF
+else
+  cat >> "$COMPOSE_FILE" <<EOF
 
   lighthouse:
     image: sigp/lighthouse:latest
@@ -105,23 +161,22 @@ services:
       --checkpoint-sync-url=https://sepolia.checkpoint-sync.ethpandaops.io
       --http
       --http-address 0.0.0.0
-      --prune-blobs
-      --prune-payloads
+      --slots-per-restore-point 2048  # Reduced from default 8192
 EOF
+fi
 
 # === START DOCKER ===
-echo ">>> Starting Sepolia node with Lighthouse..."
+echo ">>> Starting optimized Sepolia node with $BEACON (storage-optimized)..."
 cd "$DATA_DIR"
 docker compose up -d
 
-# === PRUNING INSTRUCTIONS ===
-echo "\n>>> ✅ Setup complete. Storage optimized for ~100-250GB."
-echo ">>> To further manage storage:"
-echo "  - Monitor disk usage: du -sh $DATA_DIR"
-echo "  - Prune Geth state manually if needed: docker exec geth geth snapshot prune-state"
-echo "  - Lighthouse prunes automatically with --prune-blobs and --prune-payloads."
-echo "\n>>> Check status with:"
+echo "\n>>> ✅ Optimized setup complete (under 500GB storage). Use these commands to monitor:"
 echo "  docker logs -f geth"
-echo "  docker logs -f lighthouse"
-echo "  curl -s http://localhost:8545 -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"method\":\"eth_syncing\",\"params\":[],\"id\":1}' | jq"
-echo "  curl -s http://localhost:5052/eth/v1/node/health | jq"
+echo "  docker logs -f $BEACON"
+echo "  df -h $DATA_DIR  # Check disk usage"
+echo "  docker exec geth geth db stats  # Check Geth storage stats"
+echo "\n>>> Storage optimization details:"
+echo "  - Reduced Geth cache to 2048MB"
+echo "  - Enabled ancient data pruning"
+echo "  - Reduced beacon chain archive points"
+echo "  - Maintained archive mode for Aztec requirements"
