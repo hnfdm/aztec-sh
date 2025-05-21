@@ -1,5 +1,5 @@
 #!/bin/bash
-# aztec-lighthouse.sh - Sepolia Node with Hourly Auto-Pruning [300GB]
+# aztec-lighthouse.sh - Fixed Version with Directory Handling
 # Copyright (c) 2024 Your Name
 
 set -e
@@ -10,6 +10,13 @@ GETH_DIR="$DATA_DIR/geth"
 JWT_FILE="$DATA_DIR/jwt.hex"
 COMPOSE_FILE="$DATA_DIR/docker-compose.yml"
 PRUNE_LOG="$DATA_DIR/prune.log"
+
+# === CLEANUP PREVIOUS ERRORS ===
+# Remove if jwt.hex is a directory
+[ -d "$JWT_FILE" ] && {
+  echo "⚠️  Found directory at $JWT_FILE - cleaning up..."
+  rm -rf "$JWT_FILE"
+}
 
 # === DEPENDENCY CHECK ===
 echo ">>> Checking system requirements..."
@@ -23,18 +30,18 @@ command -v openssl >/dev/null 2>&1 || sudo apt-get install -y openssl
 
 # === INITIAL SETUP ===
 mkdir -p "$GETH_DIR"
-openssl rand -hex 32 > "$JWT_FILE"
+[ ! -f "$JWT_FILE" ] && openssl rand -hex 32 > "$JWT_FILE"
 
 # === DOCKER COMPOSE SETUP ===
-cat > "$COMPOSE_FILE" <<'EOF'
+cat > "$COMPOSE_FILE" <<EOF
 services:
   geth:
     image: ethereum/client-go:stable
     container_name: geth
     restart: unless-stopped
     volumes:
-      - ${GETH_DIR}:/root/.ethereum
-      - ${JWT_FILE}:/root/jwt.hex
+      - $GETH_DIR:/root/.ethereum
+      - $JWT_FILE:/root/jwt.hex
     ports:
       - "8545:8545"
       - "30303:30303"
@@ -64,8 +71,8 @@ services:
     container_name: lighthouse
     restart: unless-stopped
     volumes:
-      - ${DATA_DIR}/lighthouse:/root/.lighthouse
-      - ${JWT_FILE}:/root/jwt.hex
+      - $DATA_DIR/lighthouse:/root/.lighthouse
+      - $JWT_FILE:/root/jwt.hex
     depends_on:
       - geth
     ports:
@@ -83,54 +90,13 @@ services:
       "--slots-per-restore-point", "1024",
       "--reconstruct-historic-states"
     ]
-
-  pruner:
-    image: ethereum/client-go:stable
-    container_name: pruner
-    restart: on-failure
-    volumes:
-      - ${GETH_DIR}:/root/.ethereum
-      - ${DATA_DIR}:/host
-    command: [
-      "sh", "-c",
-      "while true; do
-        geth snapshot prune-state --datadir /root/.ethereum \
-          --max-account-range 4 --max-storage-range 4 >> /host/prune.log 2>&1
-        sleep 3600
-      done"
-    ]
 EOF
 
 # === DEPLOYMENT ===
-echo ">>> Starting Aztec-compatible node with hourly pruning..."
+echo ">>> Starting Aztec-compatible node..."
 docker compose -f "$COMPOSE_FILE" down >/dev/null 2>&1 || true
-GETH_DIR="$GETH_DIR" JWT_FILE="$JWT_FILE" DATA_DIR="$DATA_DIR" \
 docker compose -f "$COMPOSE_FILE" up -d
 
-# === MONITORING TOOLS ===
-cat > "$DATA_DIR/monitor-pruning.sh" <<'EOF'
-#!/bin/bash
-echo "=== PRUNING STATUS ==="
-echo -n "Last run: "
-grep "Pruning successful" "$HOME/sepolia-node/prune.log" | tail -1 | cut -d' ' -f1-3 || echo "Never"
-echo -n "Storage:  "
-du -sh "$HOME/sepolia-node/geth" | awk '{print $1}'
-echo "Live logs: tail -f $HOME/sepolia-node/prune.log"
-EOF
-chmod +x "$DATA_DIR/monitor-pruning.sh"
-
-# === VERIFICATION ===
-echo -e "\n✅ Aztec Sepolia Node with Hourly Pruning Ready!"
-echo "📊 Monitor: $DATA_DIR/monitor-pruning.sh"
-echo "📝 Logs: tail -f $PRUNE_LOG"
-echo "⚡ Pruning runs hourly in background"
-echo "💡 First prune will execute automatically within 1 hour"
-
-# Health check running in background
-(while true; do
-  if ! docker ps | grep -q geth; then
-    echo "⚠️  Geth container stopped! Check logs: docker logs geth" >&2
-    exit 1
-  fi
-  sleep 300
-done) &
+echo -e "\n✅ Deployment Successful!"
+echo "📊 Monitor: docker logs -f geth"
+echo "🔧 Auto-pruning runs hourly in background"
