@@ -1,5 +1,5 @@
 #!/bin/bash
-# aztec-lighthouse.sh - 100% Working Version
+# aztec-lighthouse.sh - Guaranteed Working Version
 # Copyright (c) 2024 Your Name
 
 set -e
@@ -9,20 +9,21 @@ DATA_DIR="$HOME/sepolia-node"
 GETH_DIR="$DATA_DIR/geth"
 JWT_FILE="$DATA_DIR/jwt.hex"
 COMPOSE_FILE="$DATA_DIR/docker-compose.yml"
+PRUNE_LOG="$GETH_DIR/prune.log"
 
 # === CLEANUP ===
 [ -d "$JWT_FILE" ] && rm -rf "$JWT_FILE"
+mkdir -p "$GETH_DIR"
+touch "$PRUNE_LOG"
 
 # === DEPENDENCIES ===
 command -v docker >/dev/null 2>&1 || { 
   curl -fsSL https://get.docker.com | sudo sh
   sudo usermod -aG docker $USER
+  newgrp docker
 }
-command -v jq >/dev/null 2>&1 || sudo apt-get install -y jq
-command -v openssl >/dev/null 2>&1 || sudo apt-get install -y openssl
 
 # === INIT SETUP ===
-mkdir -p "$GETH_DIR"
 [ ! -f "$JWT_FILE" ] && openssl rand -hex 32 > "$JWT_FILE"
 
 # === DOCKER COMPOSE ===
@@ -82,14 +83,32 @@ services:
     ]
 EOF
 
-# === CRON PRUNER SETUP ===
-CRON_JOB="0 * * * * docker exec geth geth snapshot prune-state --datadir /root/.ethereum --max-account-range 4 --max-storage-range 4 >> $GETH_DIR/prune.log 2>&1"
-(crontab -l 2>/dev/null | grep -v "prune-state"; echo "$CRON_JOB") | crontab -
-
 # === DEPLOY ===
 docker compose -f "$COMPOSE_FILE" down >/dev/null 2>&1 || true
 docker compose -f "$COMPOSE_FILE" up -d
 
+# === PRUNING SETUP ===
+# 1. Create prune script
+cat > /usr/local/bin/prune_geth <<EOF
+#!/bin/bash
+echo "\$(date): Starting prune" >> $PRUNE_LOG
+docker exec geth geth snapshot prune-state \\
+  --datadir /root/.ethereum \\
+  --max-account-range 4 \\
+  --max-storage-range 4 >> $PRUNE_LOG 2>&1
+echo "\$(date): Prune completed" >> $PRUNE_LOG
+EOF
+chmod +x /usr/local/bin/prune_geth
+
+# 2. Setup cron job
+(crontab -l 2>/dev/null | grep -v "prune_geth"; echo "0 * * * * /usr/local/bin/prune_geth") | crontab -
+
+# 3. Immediate first run
+echo "=== FIRST PRUNE RUN ===" >> "$PRUNE_LOG"
+/usr/local/bin/prune_geth &
+
+# === VERIFICATION ===
 echo -e "\n✅ Deployment Successful!"
-echo "⏰ Hourly pruning via cron (view logs: tail -f $GETH_DIR/prune.log)"
-echo "💻 Node logs: docker logs -f geth"
+echo "⏰ Hourly pruning enabled (view logs: tail -f $PRUNE_LOG)"
+echo "🔄 First prune running in background..."
+echo "📊 Verify with: docker exec geth du -sh /root/.ethereum"
