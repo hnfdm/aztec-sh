@@ -1,5 +1,5 @@
 #!/bin/bash
-# aztec-lighthouse.sh - Fixed Pruner Version
+# aztec-lighthouse.sh - Final Working Version
 # Copyright (c) 2024 Your Name
 
 set -e
@@ -84,18 +84,16 @@ services:
     ]
 
   pruner:
-    image: alpine:latest
+    image: ethereum/client-go:stable
     container_name: pruner
     restart: unless-stopped
     volumes:
       - $GETH_DIR:/root/.ethereum
-      - /usr/bin/docker:/usr/bin/docker
-      - /var/run/docker.sock:/var/run/docker.sock
+    entrypoint: ["/bin/sh", "-c"]
     command: >
-      /bin/sh -c "
-      while true; do
+      "while true; do
         echo \"\$(date): Starting prune...\" >> /root/.ethereum/prune.log;
-        docker exec geth geth snapshot prune-state \\
+        geth snapshot prune-state \\
           --datadir /root/.ethereum \\
           --max-account-range 4 \\
           --max-storage-range 4 >> /root/.ethereum/prune.log 2>&1;
@@ -105,7 +103,7 @@ services:
 EOF
 
 # === DEPLOYMENT ===
-echo ">>> Starting node with fixed pruner..."
+echo ">>> Starting node with working pruner..."
 docker compose -f "$COMPOSE_FILE" down >/dev/null 2>&1 || true
 docker compose -f "$COMPOSE_FILE" up -d
 
