@@ -1,29 +1,32 @@
 #!/bin/bash
-# aztec-lighthouse.sh - 100% Working Version
+# aztec-lighthouse.sh - Complete Auto-Pruning Solution
 # Copyright (c) 2024 Your Name
 
 set -e
 
-# === CONFIG ===
+# === CONFIGURATION ===
 DATA_DIR="$HOME/sepolia-node"
 GETH_DIR="$DATA_DIR/geth"
 JWT_FILE="$DATA_DIR/jwt.hex"
 COMPOSE_FILE="$DATA_DIR/docker-compose.yml"
 PRUNE_LOG="$GETH_DIR/prune.log"
 
-# === CLEANUP ===
+# === CLEANUP PREVIOUS INSTALLS ===
 [ -d "$JWT_FILE" ] && rm -rf "$JWT_FILE"
 mkdir -p "$GETH_DIR"
 touch "$PRUNE_LOG"
 
 # === DEPENDENCIES ===
-command -v docker >/dev/null 2>&1 || { 
+command -v docker >/dev/null 2>&1 || {
+  echo "Installing Docker..."
   curl -fsSL https://get.docker.com | sudo sh
   sudo usermod -aG docker $USER
   newgrp docker
 }
+command -v jq >/dev/null 2>&1 || sudo apt-get install -y jq
+command -v openssl >/dev/null 2>&1 || sudo apt-get install -y openssl
 
-# === INIT SETUP ===
+# === INITIAL SETUP ===
 [ ! -f "$JWT_FILE" ] && openssl rand -hex 32 > "$JWT_FILE"
 
 # === DOCKER COMPOSE ===
@@ -83,30 +86,68 @@ services:
     ]
 EOF
 
-# === DEPLOY ===
+# === PRUNING SYSTEM ===
+# 1. Create smart prune script
+sudo tee /usr/local/bin/prune_geth <<'EOF' >/dev/null
+#!/bin/bash
+LOG="$HOME/sepolia-node/geth/prune.log"
+
+# Wait for Geth to be responsive
+for i in {1..10}; do
+  if curl -s -X POST -H "Content-Type: application/json" \
+    --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' \
+    http://localhost:8545 >/dev/null; then
+    break
+  fi
+  sleep 6
+done
+
+# Get sync status
+SYNC=$(curl -s -X POST -H "Content-Type: application/json" \
+  --data '{"jsonrpc":"2.0","method":"eth_syncing","params":[],"id":1}' \
+  http://localhost:8545 | jq -r '.result')
+
+if [ "$SYNC" != "false" ]; then
+  echo "$(date): Skipping prune - Geth syncing (Progress: $SYNC)" >> "$LOG"
+  exit 0
+fi
+
+# Check Lighthouse
+LIGHTHOUSE_STATUS=$(curl -s http://localhost:5052/eth/v1/node/syncing | jq -r '.data.is_syncing')
+if [ "$LIGHTHOUSE_STATUS" == "true" ]; then
+  echo "$(date): Skipping prune - Beacon chain syncing" >> "$LOG"
+  exit 0
+fi
+
+echo "$(date): Starting safe prune" >> "$LOG"
+docker exec geth geth snapshot prune-state --datadir /root/.ethereum 2>&1 | tee -a "$LOG"
+PRUNE_EXIT=$?
+echo "$(date): Prune completed (Exit: $PRUNE_EXIT)" >> "$LOG"
+exit $PRUNE_EXIT
+EOF
+
+# 2. Make executable
+sudo chmod +x /usr/local/bin/prune_geth
+
+# 3. Setup hourly cron job at a random minute to avoid load spikes
+CRON_MINUTE=$(( RANDOM % 60 ))
+(crontab -l 2>/dev/null | grep -v "prune_geth"; echo "$CRON_MINUTE * * * * /usr/local/bin/prune_geth") | crontab -
+
+# === DEPLOYMENT ===
 docker compose -f "$COMPOSE_FILE" down >/dev/null 2>&1 || true
 docker compose -f "$COMPOSE_FILE" up -d
 
-# === PRUNING SETUP ===
-# 1. Create prune script
-cat > /usr/local/bin/prune_geth <<'EOF'
-#!/bin/bash
-PRUNE_LOG="$HOME/sepolia-node/geth/prune.log"
-echo "$(date): Starting prune" >> "$PRUNE_LOG"
-docker exec geth geth snapshot prune-state --datadir /root/.ethereum >> "$PRUNE_LOG" 2>&1
-echo "$(date): Prune completed (Exit code: $?)" >> "$PRUNE_LOG"
-EOF
-chmod +x /usr/local/bin/prune_geth
-
-# 2. Setup cron job
-(crontab -l 2>/dev/null | grep -v "prune_geth"; echo "0 * * * * /usr/local/bin/prune_geth") | crontab -
-
-# 3. Immediate first run
-echo "=== INITIAL PRUNE ===" >> "$PRUNE_LOG"
-/usr/local/bin/prune_geth &
-
 # === VERIFICATION ===
-echo -e "\n✅ Deployment Successful!"
-echo "⏰ Hourly pruning enabled (view logs: tail -f $PRUNE_LOG)"
-echo "💾 Storage: docker exec geth du -sh /root/.ethereum"
-echo "🔍 First prune running in background..."
+echo -e "\n\033[1;32m✅ Deployment Successful!\033[0m"
+echo -e "\n\033[1;34m=== Monitoring Commands ===\033[0m"
+echo "Prune Logs:      tail -f $PRUNE_LOG"
+echo "Geth Sync:       curl -s -X POST -H \"Content-Type: application/json\" --data '{\"jsonrpc\":\"2.0\",\"method\":\"eth_syncing\",\"params\":[],\"id\":1}' http://localhost:8545 | jq"
+echo "Lighthouse Sync: curl -s http://localhost:5052/eth/v1/node/syncing | jq"
+echo "Storage Usage:   docker exec geth du -sh /root/.ethereum"
+echo -e "\n\033[1;34m=== Automatic Pruning ===\033[0m"
+echo "• Runs hourly at :$CRON_MINUTE"
+echo "• Will auto-activate when sync completes"
+echo "• First test run starting now..."
+
+# Initial test
+/usr/local/bin/prune_geth &
