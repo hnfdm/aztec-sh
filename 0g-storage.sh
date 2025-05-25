@@ -109,14 +109,14 @@ ESCAPED_KEY=$(printf '%s\n' "$PRIVATE_KEY" | sed -e 's/[\/&]/\\&/g')
 ESCAPED_ENDPOINT=$(printf '%s\n' "$RPC_ENDPOINT" | sed -e 's/[\/&]/\\&/g')
 
 # Update config file with proper values
-sed -i "s|^#*\s*miner_key\s*=.*|miner_key = \"$ESCAPED_KEY\"|" $HOME/0g-storage-node/run/config-testnet-turbo.toml
-sed -i "s|^blockchain_rpc_endpoint\s*=.*|blockchain_rpc_endpoint = \"$ESCAPED_ENDPOINT\"|" $HOME/0g-storage-node/run/config-testnet-turbo.toml
+sed -i "s|^#*\s*miner_key\s*=.*|miner_key = \"$ESCAPED_KEY\"|" $HOME/0g-storage-node/run/0g_storage_config.toml
+sed -i "s|^blockchain_rpc_endpoint\s*=.*|blockchain_rpc_endpoint = \"$ESCAPED_ENDPOINT\"|" $HOME/0g-storage-node/run/c0g_storage_config.toml
 
 echo -e "\033[32mPrivate key and RPC endpoint have been successfully added to the config file.\033[0m"
 
 # Step 7: Verify configuration
 echo "Verifying configuration changes..."
-grep -E "^(miner_key|blockchain_rpc_endpoint)" $HOME/0g-storage-node/run/config-testnet-turbo.toml
+grep -E "^(miner_key|blockchain_rpc_endpoint)" $HOME/0g-storage-node/run/0g_storage_config.toml
 
 # Step 8: Configure firewall
 echo "Configuring firewall..."
@@ -134,7 +134,7 @@ After=network.target
 [Service]
 User=$USER
 WorkingDirectory=$HOME/0g-storage-node/run
-ExecStart=$HOME/0g-storage-node/target/release/zgs_node --config $HOME/0g-storage-node/run/config-testnet-turbo.toml
+ExecStart=$HOME/0g-storage-node/target/release/zgs_node --config $HOME/0g-storage-node/run/0g_storage_config.toml
 Restart=on-failure
 RestartSec=10
 LimitNOFILE=65535
@@ -159,7 +159,7 @@ echo "$SERVICE_STATUS"
 if [[ "$SERVICE_STATUS" != *"active (running)"* ]]; then
     echo -e "\033[31mError: Service failed to start. Trying to run manually for debugging...\033[0m"
     cd $HOME/0g-storage-node/run
-    RUST_LOG=debug RUST_BACKTRACE=full $HOME/0g-storage-node/target/release/zgs_node --config config-testnet-turbo.toml
+    RUST_LOG=debug RUST_BACKTRACE=full $HOME/0g-storage-node/target/release/zgs_node --config 0g_storage_config.toml
     exit 1
 fi
 
