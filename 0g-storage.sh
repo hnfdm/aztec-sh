@@ -92,7 +92,7 @@ cd $HOME
 rm -rf 0g-storage-node
 git clone https://github.com/0glabs/0g-storage-node.git
 cd 0g-storage-node
-git checkout v0.8.4
+git checkout v0.8.7
 git submodule update --init --recursive
 cargo build --release || { echo -e "\033[31mBuild failed.\033[0m"; exit 1; }
 
