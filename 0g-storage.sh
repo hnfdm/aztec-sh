@@ -98,9 +98,9 @@ cargo build --release || { echo -e "\033[31mBuild failed.\033[0m"; exit 1; }
 
 # Step 5: Download config file
 echo "Downloading configuration file..."
-CONFIG_URL="https://raw.githubusercontent.com/zstake-xyz/test/main/run/0g_storage_config.toml"
-mkdir -p $HOME/0g-storage-node/run
-wget -O $HOME/0g-storage-node/run/config-testnet-turbo.toml $CONFIG_URL || { echo -e "\033[31mFailed to download config file.\033[0m"; exit 1; }
+CONFIG_URL="https://raw.githubusercontent.com/zstake-xyz/test/main/0g_storage_config.toml"
+mkdir -p $HOME/zstake-xyz/test
+wget -O $HOME/zstake-xyz/test/0g_storage_config.toml $CONFIG_URL || { echo -e "\033[31mFailed to download config file.\033[0m"; exit 1; }
 
 # Step 6: Set miner key and RPC endpoint
 echo "Setting miner key and RPC endpoint..."
