@@ -77,4 +77,4 @@ cd ~/sepolia-node && docker compose down && rm -rf ~/sepolia-node
 ```
 
 ### ❓ Credit
-- Thanks to (Cerberus)[https://github.com/cerberus-node/aztec-network/blob/main/auto_setup_sepolia.md] for help provide early step.
+- Thanks to [Cerberus](https://github.com/cerberus-node/aztec-network/blob/main/auto_setup_sepolia.md) for help provide early step.
