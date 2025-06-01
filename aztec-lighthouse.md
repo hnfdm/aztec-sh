@@ -27,28 +27,45 @@ This will:
 
 ---
 
-### ✅ Verify
+### ✅ Verify & Monitor
 
-### Check sync progress:
+1️⃣ Check Sync Progress:
 ```bash
 curl -s -X POST -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"eth_syncing","params":[],"id":1}' http://localhost:8545 | jq
 ```
 
-### Check Beacon API health:
-For Lighthouse:
+2️⃣ Check Sync Log:
+```bash
+docker logs -f geth
+```
+
+3️⃣ Check Lighthouse Log:
+```bash
+ docker logs -f lighthouse
+```
+
+4️⃣ Check Beacon API health:
 ```bash
 curl -s http://localhost:5052/eth/v1/node/syncing | jq
+```
+
+5️⃣ Monitor Storage:
+```bash
+watch df -h /root/sepolia-node
+```
+
+6️⃣ Auto Prune Log:
+```bash
+watch df -h /root/sepolia-node
 ```
 
 ---
 
 ### 🧠 Notes
-
 - The sync process may take several hours to complete.
 - Ensure enough disk space (500GB+) is available.
 - Once `eth_syncing` returns `false`, your RPC is fully operational.
-
-Once opened, you can access RPC or Beacon API from other machines via:
+- Once opened, you can access RPC or Beacon API from other machines via:
 - Geth RPC: `http://<your-ip>:8545`
 - Beacon API: `http://<your-ip>:5052`
 
