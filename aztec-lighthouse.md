@@ -1,10 +1,10 @@
-## 📘 Guide: Auto Setup Beacon RPC for Sequencer
+### 📘 Guide: Auto Setup Beacon RPC for Sequencer
 
 This guide walks you through setting up a Beacon Sepolia Ethereum node (Geth + Lighthouse) using an automated script. Ideal for running a sequencer backend that requires both RPC and Beacon API access.
 
 ---
 
-## ⚙️ System Requirements
+### ⚙️ System Requirements
 
 - **Disk:** 1TB+ SSD
 - **RAM:** 16GB+
@@ -13,9 +13,7 @@ This guide walks you through setting up a Beacon Sepolia Ethereum node (Geth + L
 
 ---
 
-## 🚀 Setup Instructions
-
-### Execute the following one-liner to download and run the installation script
+### 🚀 Setup Instructions
 
 ```bash
 curl -sL https://raw.githubusercontent.com/hnfdm/aztec-sh/main/aztec-lighthouse.sh -o aztec-lighthouse.sh && chmod +x aztec-lighthouse.sh && bash aztec-lighthouse.sh
@@ -29,7 +27,7 @@ This will:
 
 ---
 
-## ✅ Verify
+### ✅ Verify
 
 ### Check sync progress:
 ```bash
@@ -44,20 +42,19 @@ curl -s http://localhost:5052/eth/v1/node/syncing | jq
 
 ---
 
-## 🧠 Notes
+### 🧠 Notes
 
 - The sync process may take several hours to complete.
 - Ensure enough disk space (500GB+) is available.
 - Once `eth_syncing` returns `false`, your RPC is fully operational.
-
----
 
 Once opened, you can access RPC or Beacon API from other machines via:
 - Geth RPC: `http://<your-ip>:8545`
 - Beacon API: `http://<your-ip>:5052`
 
 ---
-## 🗑️ Remove Node
+
+### 🗑️ Remove Node
 ```bash
 cd ~/sepolia-node && docker compose down && rm -rf ~/sepolia-node
 ```
