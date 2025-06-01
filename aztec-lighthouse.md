@@ -1,12 +1,12 @@
-### 📘 Guide: Auto Setup Beacon Sepolia RPC for Sequencer
+### 📘 Guide - Auto Setup Beacon Sepolia RPC for Sequencer with Auto Prune
 
-This guide walks you through setting up a Beacon Sepolia RPC (Geth + Lighthouse) using an automated script. Ideal for running a sequencer backend that requires both RPC and Beacon API access.
+This guide walks you through setting up a Beacon Sepolia RPC (Geth + Lighthouse) using an automated script. Ideal for running a sequencer backend that requires both RPC and Beacon API access but with limited storage.
 
 ---
 
 ### ⚙️ System Requirements
 
-- **Disk:** 1TB+ SSD
+- **Disk:** 500GB+ SSD
 - **RAM:** 16GB+
 - **OS:** Ubuntu 20.04+ (or compatible Linux distro)
 - **Tools:** Docker, Docker Compose, `curl`, `openssl`
@@ -75,3 +75,6 @@ watch df -h /root/sepolia-node
 ```bash
 cd ~/sepolia-node && docker compose down && rm -rf ~/sepolia-node
 ```
+
+### ❓ Credit
+- Thanks to (Cerberus)[https://github.com/cerberus-node/aztec-network/blob/main/auto_setup_sepolia.md] for help provide early step.
