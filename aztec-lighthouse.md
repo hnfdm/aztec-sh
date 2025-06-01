@@ -1,6 +1,6 @@
-### 📘 Guide: Auto Setup Beacon RPC for Sequencer
+### 📘 Guide: Auto Setup Beacon Sepolia RPC for Sequencer
 
-This guide walks you through setting up a Beacon Sepolia Ethereum node (Geth + Lighthouse) using an automated script. Ideal for running a sequencer backend that requires both RPC and Beacon API access.
+This guide walks you through setting up a Beacon Sepolia RPC (Geth + Lighthouse) using an automated script. Ideal for running a sequencer backend that requires both RPC and Beacon API access.
 
 ---
 
